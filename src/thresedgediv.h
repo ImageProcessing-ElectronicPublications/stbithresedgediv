@@ -30,6 +30,7 @@ QUICK START
 VERSION HISTORY
 
 1.0  2024-12-26  "init"    Initial header release.
+1.1  2024-01-24  "bimodal"    Correct BiModal Value.
 
 **/
 
@@ -118,25 +119,26 @@ float image_filter_edgediv(unsigned int width, unsigned int height, unsigned cha
 float image_threshold_bimodal(unsigned int width, unsigned int height, unsigned char components, float delta, unsigned char bound_lower, unsigned char bound_upper, unsigned char* image)
 {
     float bwm = 0.0f;
-	unsigned int histsize = 256;
-	uint64_t histogram[histsize];
+    unsigned int histsize = 256;
+    uint64_t histogram[histsize];
 
-	unsigned int threshold = 128, Tn;
-	uint64_t im, iw, ib;
-	double Tw, Tb;
-	float part = 0.5f + delta / 256.0f;
-	part = (part < 0.0f) ? 0.0f : (part < 1.0f) ? part : 1.0f;
-	
+    unsigned int threshold = 128, Tn;
+    uint64_t im, iw, ib;
+    double Tw, Tb;
+    int Tmin = 255, Tmax = 0, Ti;
+    float part = 0.5f + (delta / 256.0f);
+    part = (part < 0.0f) ? 0.0f : ((part < 1.0f) ? part : 1.0f);
+
     if (image != NULL)
-    {	
+    {
         size_t count_black = 0;
         for (unsigned char c = 0; c < components; c++)
         {
             size_t i = c;
-			for (unsigned int k = 0; k < histsize; k++)
-			{
-				histogram[k] = 0;
-			}
+            for (unsigned int k = 0; k < histsize; k++)
+            {
+                histogram[k] = 0;
+            }
 
             for (unsigned int y = 0; y < height; y++)
             {
@@ -149,40 +151,45 @@ float image_threshold_bimodal(unsigned int width, unsigned int height, unsigned 
                 }
             }
 
-			Tb = 0.0;
-			for (unsigned int k = 0; k < histsize; k++)
-			{
-				Tb += histogram[k];
-			}
-			Tb /= width;
-			Tb /= height;
+            Ti = 0;
+            while (Ti < Tmin)
+            {
+                Tmin = (histogram[Ti] > 0) ? Ti : Tmin;
+                Ti++;
+            }
+            Ti = 255;
+            while (Ti > Tmax)
+            {
+                Tmax = (histogram[Ti] > 0) ? Ti : Tmax;
+                Ti--;
+            }
+            Tmax++;
 
-			threshold = (unsigned int) (Tb + 0.5);
-			Tn = 0;
-
-			while (threshold != Tn)
-			{
-				Tn = threshold;
-				Tb = Tw = 0.0;
-				ib = iw = 0;
-				for (unsigned int k = 0; k < histsize; k++)
-				{
-					im = histogram[k];
-					if (k < threshold)
-					{
-						Tb += (double) (im * k);
-						ib += im;
-					}
-					else
-					{
-						Tw += (double) (im * k);
-						iw += im;
-					}
-				}
-				Tb = (ib > 0) ? (Tb / ib) : 0.0;
-				Tw = (iw > 0) ? (Tw / iw) : (double) histsize;
-				threshold = (unsigned int) (part * Tw + (1.0 - part) * Tb + 0.5);
-			}
+            threshold = (unsigned int) (part * Tmax + (1.0 - part) * Tmin + 0.5);
+            Tn = threshold + 1;
+            while (threshold != Tn)
+            {
+                Tn = threshold;
+                Tb = Tw = 0.0;
+                ib = iw = 0;
+                for (unsigned int k = 0; k < histsize; k++)
+                {
+                    im = histogram[k];
+                    if (k < threshold)
+                    {
+                        Tb += (double) (im * k);
+                        ib += im;
+                    }
+                    else
+                    {
+                        Tw += (double) (im * k);
+                        iw += im;
+                    }
+                }
+                Tb = (ib > 0) ? (Tb / ib) : Tmin;
+                Tw = (iw > 0) ? (Tw / iw) : Tmax;
+                threshold = (unsigned int) (part * Tw + (1.0f - part) * Tb + 0.5f);
+            }
 
             i = c;
             for (unsigned int y = 0; y < height; y++)
@@ -191,7 +198,7 @@ float image_threshold_bimodal(unsigned int width, unsigned int height, unsigned 
                 {
                     float s = image[i];
                     unsigned char retval = 255;
-                    if (s < (threshold + delta))
+                    if (s < threshold)
                     {
                         retval = 0;
                         count_black++;
